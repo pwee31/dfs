@@ -72,6 +72,9 @@ num_lineups = st.slider("Number of Lineups", 1, 5, 3)
 locked_players = st.multiselect("Lock Players (Ensure they are in every lineup)", players_df["Name"].tolist())
 excluded_players = st.multiselect("Exclude Players (Remove them from all lineups)", players_df["Name"].tolist())
 
+# Exclude excluded players from selection
+players_df = players_df[~players_df["Name"].isin(excluded_players)]
+
 # Store used lineups to prevent duplicates
 used_lineups = set()
 
@@ -89,9 +92,7 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
         prob += lpSum(player_vars[p["Name"]] * p["Projection"] * randomness_factor for _, p in top_players.iterrows())
         
         # Salary cap constraint
-        min_salary_cap = user_salary_cap * 0.75  # Allow using at least 75% of salary cap
         prob += lpSum(player_vars[p["Name"]] * p["Salary"] for _, p in top_players.iterrows()) <= user_salary_cap
-        prob += lpSum(player_vars[p["Name"]] * p["Salary"] for _, p in top_players.iterrows()) >= min_salary_cap
         
         # Ensure exactly 8 players are selected
         prob += lpSum(player_vars[p["Name"]] for _, p in top_players.iterrows()) == num_players
@@ -100,13 +101,10 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
         for pos, count in roster_slots.items():
             prob += lpSum(player_vars[p["Name"]] for _, p in top_players.iterrows() if p["Position"] == pos or pos == "UTIL") == count
         
-        # Lock and Exclude Players
+        # Force inclusion of locked players
         for player in locked_players:
             if player in player_vars:
                 prob += player_vars[player] == 1
-        for player in excluded_players:
-            if player in player_vars:
-                prob += player_vars[player] == 0
         
         # Solve the problem
         try:
@@ -133,4 +131,5 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
     for idx, lineup in enumerate(optimal_lineups):
         st.write(f"### Optimal Lineup {idx+1}")
         st.dataframe(lineup)
+
 
