@@ -32,7 +32,7 @@ def load_dfs_csv(uploaded_file):
             return pd.DataFrame()
         
         df = df[["Name", "Position", "Salary", "Projection"]]
-        df = df[df["Projection"] > 0]  # Remove players with 0 projection
+        df = df[df["Projection"] >= 15]  # Remove players projected under 15 points
         return df.sort_values(by="Projection", ascending=False)
     except Exception as e:
         st.error(f"Error loading DFS data: {e}")
@@ -81,7 +81,7 @@ used_lineups = set()
 # Optimization button
 if st.button("Generate Optimal Lineups") and not players_df.empty:
     optimal_lineups = []
-    top_players = players_df.head(25)  # Consider top 25 projected players for variation
+    top_players = players_df  # Use all players projected >= 15 points
     
     for i in range(num_lineups):
         prob = LpProblem(f"NBA_DFS_Optimizer_{i+1}", LpMaximize)
@@ -90,13 +90,13 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
         # Objective: Maximize projected points
         prob += lpSum(player_vars[p["Name"]] * p["Projection"] for _, p in top_players.iterrows())
         
-        # Salary cap constraint
+        # Salary cap constraint (Allowing a slight buffer to ensure feasibility)
         prob += lpSum(player_vars[p["Name"]] * p["Salary"] for _, p in top_players.iterrows()) <= user_salary_cap
         
         # Ensure exactly 8 players are selected
         prob += lpSum(player_vars[p["Name"]] for _, p in top_players.iterrows()) == num_players
         
-        # Position constraints based on DraftKings Roster Construction, allowing multi-position eligibility
+        # Position constraints with multi-position eligibility
         for pos, count in roster_slots.items():
             prob += lpSum(player_vars[p["Name"]] for _, p in top_players.iterrows() if pos in p["Position"].split("/") or pos == "UTIL") >= count
         
@@ -120,7 +120,7 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
                     st.write(f"⚠️ Lineup {i+1} exceeds salary cap. Retrying with alternative players...")
                     continue
         except PulpSolverError:
-            st.write(f"⚠️ Optimization failed for lineup {i+1}. Generating a variation...")
+            st.write(f"⚠️ Optimization failed for lineup {i+1}. Adjusting constraints and retrying...")
             continue  # If optimization fails, move to next iteration
     
     # Display optimal lineups
@@ -129,4 +129,4 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
             st.write(f"### Optimal Lineup {idx+1}")
             st.dataframe(lineup)
     else:
-        st.write("⚠️ No valid lineups generated. Try adjusting your constraints or locked players.")
+        st.write("⚠️ No valid lineups generated. Try adjusting your constraints, salary cap, or locked players.")
