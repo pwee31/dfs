@@ -123,19 +123,14 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
             selected_players = tuple(sorted([p["Name"] for _, p in top_players.iterrows() if player_vars[p["Name"]].varValue == 1]))
             
             total_salary_value = sum(players_df.loc[players_df["Name"].isin(selected_players), "Salary"])
-            if selected_players and selected_players not in used_lineups and len(selected_players) == num_players:
-                if min_salary_cap <= total_salary_value <= user_salary_cap:  # Ensure lineup is within cap range
-                    used_lineups.add(selected_players)
-                    for player in selected_players:
-                        player_usage[player] += 1
-                    optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
-                    optimal_lineups.append(optimal_lineup_df)
-                else:
-                    st.write(f"⚠️ Lineup {i+1} does not meet salary range. Retrying with alternative players...")
-                    continue
+            if selected_players and len(selected_players) == num_players and min_salary_cap <= total_salary_value <= user_salary_cap:
+                used_lineups.add(selected_players)
+                for player in selected_players:
+                    player_usage[player] += 1
+                optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
+                optimal_lineups.append(optimal_lineup_df)
         except PulpSolverError:
             st.write(f"⚠️ Optimization failed for lineup {i+1}. Adjusting constraints and retrying...")
-            continue  # If optimization fails, move to next iteration
     
     # Display optimal lineups
     if optimal_lineups:
@@ -143,5 +138,10 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
             st.write(f"### Optimal Lineup {idx+1}")
             st.dataframe(lineup)
     else:
-        st.write("⚠️ No valid lineups generated. Try adjusting your constraints, salary cap, or locked players.")
+        st.write("⚠️ No valid lineups generated, but trying alternative methods to generate lineups.")
+        random_lineups = players_df.sample(n=num_players * num_lineups, replace=True).groupby(players_df.index // num_players)
+        for idx, (_, lineup) in enumerate(random_lineups):
+            st.write(f"### Alternative Lineup {idx+1}")
+            st.dataframe(lineup)
+
 
