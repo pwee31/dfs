@@ -1,53 +1,31 @@
 import streamlit as st
 import pandas as pd
-import requests
-from bs4 import BeautifulSoup
 from pulp import LpMaximize, LpProblem, LpVariable, lpSum, PulpSolverError
 
-# Function to scrape player data from ESPN NBA
-def scrape_espn_data():
-    url = "https://www.espn.com/nba/stats/player"  # ESPN stats page
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
-    
-    response = requests.get(url, headers=headers)
-    
-    if response.status_code != 200:
-        print("Failed to fetch data. Status code:", response.status_code)
+# Load DraftKings CSV Data
+@st.cache_data
+def load_draftkings_csv():
+    file_path = "/mnt/data/DKSalaries.csv"  # Path to uploaded DraftKings CSV
+    try:
+        df = pd.read_csv(file_path)
+        df = df.rename(columns={"Name": "Name", "Position": "Position", "Salary": "Salary", "Projection": "Projection"})
+        df = df[["Name", "Position", "Salary", "Projection"]]
+        return df
+    except Exception as e:
+        st.error(f"Error loading DraftKings data: {e}")
         return pd.DataFrame()
-    
-    soup = BeautifulSoup(response.text, "html.parser")
-    players = []
-    
-    # Find table
-    table = soup.find("table")
-    if not table:
-        print("⚠️ Failed to locate player table on ESPN.")
-        return pd.DataFrame()
-    
-    rows = table.find_all("tr")[1:]
-    for row in rows:
-        cols = row.find_all("td")
-        if len(cols) > 5:
-            try:
-                name = cols[0].text.strip()
-                position = "N/A"  # ESPN may not have position data
-                salary = 5000  # Placeholder salary if unavailable
-                projection = float(cols[1].text.strip())  # Assuming second column is projected points
-                players.append({"Name": name, "Position": position, "Salary": salary, "Projection": projection})
-            except ValueError:
-                continue
-    
-    return pd.DataFrame(players)
 
 # Streamlit UI
 st.title("NBA DFS Optimizer - DraftKings Edition")
 st.write("Generate up to 5 optimized NBA DFS lineups based on DraftKings salary cap.")
 
-# Scrape player data
-st.write("Fetching latest player projections...")
-players_df = scrape_espn_data()
-st.write("### Scraped Player Data")
-st.dataframe(players_df)
+# Load CSV player data
+players_df = load_draftkings_csv()
+if players_df.empty:
+    st.write("⚠️ No valid player data found. Please upload a valid DraftKings CSV file.")
+else:
+    st.write("### Loaded Player Data")
+    st.dataframe(players_df)
 
 # DraftKings Salary Cap & Roster Constraints
 salary_cap = 50000
@@ -103,3 +81,4 @@ if st.button("Generate Optimal Lineups"):
     for idx, lineup in enumerate(optimal_lineups):
         st.write(f"### Optimal Lineup {idx+1}")
         st.dataframe(lineup)
+
