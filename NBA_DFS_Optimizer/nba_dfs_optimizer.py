@@ -2,12 +2,10 @@ import streamlit as st
 import pandas as pd
 from pulp import LpMaximize, LpProblem, LpVariable, lpSum, PulpSolverError
 
-# Load NBA DFS CSV Data
-@st.cache_data
-def load_dfs_csv():
-    file_path = "/mnt/data/DFF_NBA_cheatsheet_2025-03-20.csv"  # Path to uploaded DFS CSV
+# Load NBA DFS CSV Data from File Uploader
+def load_dfs_csv(uploaded_file):
     try:
-        df = pd.read_csv(file_path)
+        df = pd.read_csv(uploaded_file)
         st.write("### Detected Columns in CSV:")
         st.write(df.columns.tolist())
         
@@ -40,13 +38,19 @@ def load_dfs_csv():
 
 # Streamlit UI
 st.title("NBA DFS Optimizer - DraftKings Edition")
-st.write("Generate up to 5 optimized NBA DFS lineups based on DraftKings salary cap.")
+st.write("Upload your DFS CSV file to generate optimized lineups.")
 
-# Load CSV player data
-players_df = load_dfs_csv()
-if players_df.empty:
-    st.write("⚠️ No valid player data found. Please upload a valid DFS CSV file.")
+# File uploader for user to upload their CSV
+uploaded_file = st.file_uploader("Upload DFS CSV", type=["csv"])
+
+if uploaded_file:
+    players_df = load_dfs_csv(uploaded_file)
 else:
+    players_df = pd.DataFrame()
+    st.write("⚠️ No file uploaded. Please upload a valid DFS CSV file.")
+
+# Show Data
+if not players_df.empty:
     st.write("### Loaded Player Data")
     st.dataframe(players_df)
 
@@ -63,7 +67,7 @@ num_lineups = st.slider("Number of Lineups", 1, 5, 3)
 used_lineups = set()
 
 # Optimization button
-if st.button("Generate Optimal Lineups"):
+if st.button("Generate Optimal Lineups") and not players_df.empty:
     optimal_lineups = []
     
     for i in range(num_lineups):
@@ -107,6 +111,7 @@ if st.button("Generate Optimal Lineups"):
     for idx, lineup in enumerate(optimal_lineups):
         st.write(f"### Optimal Lineup {idx+1}")
         st.dataframe(lineup)
+
 
 
 
