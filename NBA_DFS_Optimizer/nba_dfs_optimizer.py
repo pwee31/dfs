@@ -21,7 +21,7 @@ def load_dfs_csv(uploaded_file):
         
         df = df.rename(columns=rename_mapping)
         
-        # Create a 'Name" column by combining first and last name
+        # Create a 'Name' column by combining first and last name
         if "First Name" in df.columns and "Last Name" in df.columns:
             df["Name"] = df["First Name"] + " " + df["Last Name"]
         
@@ -32,6 +32,7 @@ def load_dfs_csv(uploaded_file):
             return pd.DataFrame()
         
         df = df[["Name", "Position", "Salary", "Projection"]]
+        df = df[df["Projection"] > 0]  # Remove players with 0 projection
         return df
     except Exception as e:
         st.error(f"Error loading DFS data: {e}")
@@ -96,14 +97,7 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
         
         # Position constraints based on DraftKings Roster Construction
         for pos, count in roster_slots.items():
-            if pos == "G":
-                prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] in ["PG", "SG"]) >= count
-            elif pos == "F":
-                prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] in ["SF", "PF"]) >= count
-            elif pos == "UTIL":
-                prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows()) >= count
-            else:
-                prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] == pos) >= count
+            prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] == pos or pos == "UTIL") == count
         
         # Lock and Exclude Players
         for player in locked_players:
@@ -123,16 +117,19 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
                 optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
                 optimal_lineups.append(optimal_lineup_df)
             else:
-                st.write(f"⚠️ Duplicate or infeasible lineup found for lineup {i+1}. Generating a sub-optimal lineup...")
-                sub_optimal_players = players_df.sample(n=num_players)  # Randomly select players if optimal lineup fails
-                optimal_lineups.append(sub_optimal_players)
+                st.write(f"⚠️ Duplicate or infeasible lineup found for lineup {i+1}. Generating a new variation...")
+                while selected_players in used_lineups and len(players_df) >= num_players:
+                    selected_players = tuple(sorted(players_df.sample(n=num_players)["Name"].tolist()))
+                used_lineups.add(selected_players)
+                optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
+                optimal_lineups.append(optimal_lineup_df)
         except PulpSolverError:
-            st.write(f"⚠️ Optimization failed for lineup {i+1}. Generating a sub-optimal lineup...")
-            sub_optimal_players = players_df.sample(n=num_players)  # Random selection as fallback
-            optimal_lineups.append(sub_optimal_players)
+            st.write(f"⚠️ Optimization failed for lineup {i+1}. Generating a new variation...")
+            selected_players = tuple(sorted(players_df.sample(n=num_players)["Name"].tolist()))
+            optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
+            optimal_lineups.append(optimal_lineup_df)
     
     # Display optimal lineups
     for idx, lineup in enumerate(optimal_lineups):
         st.write(f"### Optimal Lineup {idx+1}")
         st.dataframe(lineup)
-
