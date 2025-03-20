@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from pulp import LpMaximize, LpProblem, LpVariable, lpSum
+from pulp import LpMaximize, LpProblem, LpVariable, lpSum, PulpSolverError
 
 # Sample NBA DFS Player Data (Replace with real data if available)
 players_data = [
@@ -25,7 +25,8 @@ st.write("Generate optimized NBA DFS lineups based on DraftKings salary cap.")
 
 # DraftKings Salary Cap & Position Constraints
 salary_cap = 50000  # DraftKings cap
-positions = {"PG": 1, "SG": 1, "SF": 1, "PF": 1, "C": 1, "G": 1, "F": 1, "UTIL": 1}
+roster_slots = {"PG": 1, "SG": 1, "SF": 1, "PF": 1, "C": 1, "G": 1, "F": 1, "UTIL": 1}
+num_players = sum(roster_slots.values())  # Should be 8 players
 
 # User Input for Custom Salary Cap
 user_salary_cap = st.number_input("Set Salary Cap", min_value=40000, max_value=60000, value=salary_cap, step=500)
@@ -45,20 +46,34 @@ if st.button("Generate Optimal Lineup"):
     # Salary cap constraint
     prob += lpSum(player_vars[p["Name"]] * p["Salary"] for p in players_data) <= user_salary_cap
 
-    # Position constraints
-    for pos, count in positions.items():
-        prob += lpSum(player_vars[p["Name"]] for p in players_data if p["Position"] == pos) >= count
+    # Enforce exactly 8 players in lineup
+    prob += lpSum(player_vars[p["Name"]] for p in players_data) == num_players
+
+    # Position constraints for roster slots
+    for pos, count in roster_slots.items():
+        if pos == "G":  # G slot can be PG or SG
+            prob += lpSum(player_vars[p["Name"]] for p in players_data if p["Position"] in ["PG", "SG"]) >= count
+        elif pos == "F":  # F slot can be SF or PF
+            prob += lpSum(player_vars[p["Name"]] for p in players_data if p["Position"] in ["SF", "PF"]) >= count
+        elif pos == "UTIL":  # UTIL can be any position
+            prob += lpSum(player_vars[p["Name"]] for p in players_data) >= count
+        else:  # Specific positions (PG, SG, SF, PF, C)
+            prob += lpSum(player_vars[p["Name"]] for p in players_data if p["Position"] == pos) == count
 
     # Solve the problem
-    prob.solve()
+    try:
+        prob.solve()
+        
+        # Get selected players
+        selected_players = [p["Name"] for p in players_data if player_vars[p["Name"]].varValue == 1]
 
-    # Get selected players
-    selected_players = [p["Name"] for p in players_data if player_vars[p["Name"]].value() == 1]
-
-    # Display optimal lineup
-    if selected_players:
-        st.write("### Optimal Lineup")
-        optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
-        st.dataframe(optimal_lineup_df)
-    else:
-        st.write("⚠️ No valid lineup found. Adjust salary cap or player pool.")
+        # Display optimal lineup
+        if selected_players:
+            st.write("### Optimal Lineup")
+            optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
+            st.dataframe(optimal_lineup_df)
+        else:
+            st.write("⚠️ No valid lineup found. Adjust salary cap or player pool.")
+    
+    except PulpSolverError:
+        st.write("⚠️ Optimization failed. Try adjusting constraints or data.")
