@@ -2,3 +2,5 @@ streamlit
 pulp
 pandas
 numpy
+beautifulsoup4
+requests
