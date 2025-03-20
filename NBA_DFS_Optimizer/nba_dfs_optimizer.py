@@ -2,6 +2,49 @@ import streamlit as st
 import pandas as pd
 from pulp import LpMaximize, LpProblem, LpVariable, lpSum, PulpSolverError
 
+# Load DraftKings CSV Data
+@st.cache_data
+def load_draftkings_csv(uploaded_file):
+    try:
+        df = pd.read_csv(uploaded_file)
+        
+        # Display column names for debugging
+        st.write("### Detected Columns in CSV:")
+        st.write(df.columns.tolist())
+        
+        # Auto-detect relevant columns
+        expected_columns = {
+            "Name": ["Name", "Player", "Full Name"],
+            "Position": ["Position", "POS"],
+            "Salary": ["Salary", "Cost"],
+            "Projection": ["Projection", "FPTS", "Proj Points"]
+        }
+
+        # Create a mapping dictionary for renaming
+        rename_mapping = {}
+        for standard_col, possible_names in expected_columns.items():
+            for possible_name in possible_names:
+                if possible_name in df.columns:
+                    rename_mapping[possible_name] = standard_col
+                    break
+
+        # Rename the columns
+        df = df.rename(columns=rename_mapping)
+
+        # Check if all required columns are available
+        missing_columns = [col for col in ["Name", "Position", "Salary", "Projection"] if col not in df.columns]
+        if missing_columns:
+            st.error(f"⚠️ Missing columns in CSV: {missing_columns}")
+            return pd.DataFrame()
+
+        # Select relevant columns
+        df = df[["Name", "Position", "Salary", "Projection"]]
+        return df
+
+    except Exception as e:
+        st.error(f"Error loading DraftKings data: {e}")
+        return pd.DataFrame()
+
 # Streamlit UI
 st.title("NBA DFS Optimizer - DraftKings Edition")
 st.write("Upload your DraftKings CSV file to generate optimized lineups.")
@@ -10,19 +53,15 @@ st.write("Upload your DraftKings CSV file to generate optimized lineups.")
 uploaded_file = st.file_uploader("Upload DraftKings CSV", type=["csv"])
 
 if uploaded_file:
-    # Read uploaded CSV into a DataFrame
-    try:
-        players_df = pd.read_csv(uploaded_file)
-        players_df = players_df.rename(columns={"Name": "Name", "Position": "Position", "Salary": "Salary", "Projection": "Projection"})
-        players_df = players_df[["Name", "Position", "Salary", "Projection"]]
-        st.write("### Loaded Player Data")
-        st.dataframe(players_df)
-    except Exception as e:
-        st.error(f"Error loading DraftKings data: {e}")
-        players_df = pd.DataFrame()
+    players_df = load_draftkings_csv(uploaded_file)
 else:
     players_df = pd.DataFrame()
     st.write("⚠️ No file uploaded. Please upload a valid DraftKings CSV file.")
+
+# Show Data
+if not players_df.empty:
+    st.write("### Loaded Player Data")
+    st.dataframe(players_df)
 
 # DraftKings Salary Cap & Roster Constraints
 salary_cap = 50000
@@ -78,5 +117,3 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
     for idx, lineup in enumerate(optimal_lineups):
         st.write(f"### Optimal Lineup {idx+1}")
         st.dataframe(lineup)
-
-
