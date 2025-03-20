@@ -8,14 +8,14 @@ def load_dfs_csv(uploaded_file):
         df = pd.read_csv(uploaded_file)
 
         st.write("### Detected Columns in CSV:")
-        st.write(df.columns.tolist())
+        st.write(df.columns.tolist())  # Debugging: Show actual column names
 
         # Auto-detect relevant columns
         expected_columns = {
             "Name": ["Name", "Player", "Full Name"],
             "Position": ["Position", "POS"],
             "Salary": ["Salary", "Cost"],
-            "Projection": ["Projection", "FPTS", "Proj Points"]
+            "Projection": ["Projection", "FPTS", "Proj Points", "FantasyPoints"]
         }
 
         # Create a mapping dictionary for renaming
@@ -30,12 +30,17 @@ def load_dfs_csv(uploaded_file):
         df = df.rename(columns=rename_mapping)
 
         # Check if all required columns exist
-        missing_columns = [col for col in ["Name", "Position", "Salary", "Projection"] if col not in df.columns]
+        missing_columns = [col for col in ["Name", "Position", "Salary"] if col not in df.columns]
         if missing_columns:
-            st.error(f"⚠️ Missing columns in CSV: {missing_columns}")
+            st.error(f"⚠️ Missing critical columns: {missing_columns}")
             return pd.DataFrame()
 
-        # Select only necessary columns
+        # If "Projection" is missing, allow manual input
+        if "Projection" not in df.columns:
+            st.warning("⚠️ No 'Projection' column found. Please enter a default projection value.")
+            df["Projection"] = st.number_input("Enter default projection for all players", min_value=0.0, value=20.0)
+
+        # Keep only necessary columns
         df = df[["Name", "Position", "Salary", "Projection"]]
         return df
 
@@ -115,4 +120,5 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
     for idx, lineup in enumerate(optimal_lineups):
         st.write(f"### Optimal Lineup {idx+1}")
         st.dataframe(lineup)
+
 
