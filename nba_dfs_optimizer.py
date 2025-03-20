@@ -50,8 +50,16 @@ prob.solve()
 selected_players = [p["Name"] for p in players_data if player_vars[p["Name"]].value() == 1]
 
 # Display optimal lineup
-if selected_players:
-    st.write("### Optimal Lineup")
-    st.dataframe(players_df[players_df["Name"].isin(selected_players)])
-else:
-    st.write("No valid lineup found. Adjust salary cap or data.")
+if st.button("Generate Optimal Lineup"):
+    # Solve the optimization problem
+    prob.solve()
+
+    # Get selected players
+    selected_players = [p["Name"] for p in players_data if player_vars[p["Name"]].value() == 1]
+
+    # Display optimal lineup
+    if selected_players:
+        st.write("### Optimal Lineup")
+        st.dataframe(players_df[players_df["Name"].isin(selected_players)])
+    else:
+        st.write("No valid lineup found. Adjust salary cap or data.")
