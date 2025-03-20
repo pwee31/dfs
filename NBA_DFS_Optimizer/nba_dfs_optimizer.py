@@ -55,6 +55,11 @@ if not players_df.empty:
     st.write("### Loaded Player Data")
     st.dataframe(players_df)
 
+# Check if "Name" exists before proceeding
+if "Name" not in players_df.columns:
+    st.error("⚠️ Critical Error: 'Name' column not found in uploaded CSV. Check column headers.")
+    st.stop()
+
 # DraftKings Salary Cap & Roster Constraints
 salary_cap = 50000
 roster_slots = {"PG": 1, "SG": 1, "SF": 1, "PF": 1, "C": 1, "G": 1, "F": 1, "UTIL": 1}
@@ -121,7 +126,7 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
                 optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
                 optimal_lineups.append(optimal_lineup_df)
             else:
-                st.write(f"⚠️ Duplicate lineup found for lineup {i+1}. Generating a new one...")
+                st.write(f"⚠️ Duplicate lineup found for lineup {i+1}. Adjust constraints to generate unique lineups.")
         except PulpSolverError:
             st.write(f"⚠️ Optimization failed for lineup {i+1}. Try adjusting constraints.")
     
@@ -129,6 +134,7 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
     for idx, lineup in enumerate(optimal_lineups):
         st.write(f"### Optimal Lineup {idx+1}")
         st.dataframe(lineup)
+
 
 
 
