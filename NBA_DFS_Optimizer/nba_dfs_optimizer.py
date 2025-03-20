@@ -67,7 +67,7 @@ roster_slots = {"PG": 1, "SG": 1, "SF": 1, "PF": 1, "C": 1, "G": 1, "F": 1, "UTI
 num_players = sum(roster_slots.values())
 
 # User Input for Salary Cap, Number of Lineups, and Player Locks/Exclusions
-user_salary_cap = st.number_input("Set Salary Cap", min_value=40000, max_value=60000, value=salary_cap, step=500)
+user_salary_cap = st.number_input("Set Salary Cap", min_value=40000, max_value=50000, value=salary_cap, step=500)
 num_lineups = st.slider("Number of Lineups", 1, 5, 3)
 locked_players = st.multiselect("Lock Players (Ensure they are in every lineup)", players_df["Name"].tolist())
 excluded_players = st.multiselect("Exclude Players (Remove them from all lineups)", players_df["Name"].tolist())
@@ -81,17 +81,16 @@ used_lineups = set()
 # Optimization button
 if st.button("Generate Optimal Lineups") and not players_df.empty:
     optimal_lineups = []
-    top_players = players_df.head(10)  # Consider top 10 projected players for variation
+    top_players = players_df.head(20)  # Consider top 20 projected players for variation
     
     for i in range(num_lineups):
         prob = LpProblem(f"NBA_DFS_Optimizer_{i+1}", LpMaximize)
         player_vars = {p["Name"]: LpVariable(p["Name"], 0, 1, cat="Binary") for _, p in top_players.iterrows()}
         
         # Objective: Maximize projected points
-        randomness_factor = random.uniform(0.9, 1.1)
-        prob += lpSum(player_vars[p["Name"]] * p["Projection"] * randomness_factor for _, p in top_players.iterrows())
+        prob += lpSum(player_vars[p["Name"]] * p["Projection"] for _, p in top_players.iterrows())
         
-        # Salary cap constraint
+        # Salary cap constraint - STRICTLY ENFORCED
         prob += lpSum(player_vars[p["Name"]] * p["Salary"] for _, p in top_players.iterrows()) <= user_salary_cap
         
         # Ensure exactly 8 players are selected
@@ -111,21 +110,21 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
             prob.solve()
             selected_players = tuple(sorted([p["Name"] for _, p in top_players.iterrows() if player_vars[p["Name"]].varValue == 1]))
             
+            total_salary = sum(players_df.loc[players_df["Name"].isin(selected_players), "Salary"])
             if selected_players and selected_players not in used_lineups and len(selected_players) == num_players:
-                used_lineups.add(selected_players)
-                optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
-                optimal_lineups.append(optimal_lineup_df)
-            else:
-                st.write(f"⚠️ Infeasible or duplicate lineup for lineup {i+1}. Generating a variation...")
-                selected_players = tuple(sorted(top_players.sample(n=num_players)["Name"].tolist()))
-                used_lineups.add(selected_players)
-                optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
-                optimal_lineups.append(optimal_lineup_df)
+                if total_salary <= user_salary_cap:  # FINAL SALARY CHECK BEFORE ADDING LINEUP
+                    used_lineups.add(selected_players)
+                    optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
+                    optimal_lineups.append(optimal_lineup_df)
+                else:
+                    st.write(f"⚠️ Lineup {i+1} exceeds salary cap. Retrying...")
         except PulpSolverError:
             st.write(f"⚠️ Optimization failed for lineup {i+1}. Generating a variation...")
             selected_players = tuple(sorted(top_players.sample(n=num_players)["Name"].tolist()))
-            optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
-            optimal_lineups.append(optimal_lineup_df)
+            total_salary = sum(players_df.loc[players_df["Name"].isin(selected_players), "Salary"])
+            if total_salary <= user_salary_cap:
+                optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
+                optimal_lineups.append(optimal_lineup_df)
     
     # Display optimal lineups
     for idx, lineup in enumerate(optimal_lineups):
