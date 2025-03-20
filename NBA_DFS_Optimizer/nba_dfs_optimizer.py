@@ -4,9 +4,9 @@ import requests
 from bs4 import BeautifulSoup
 from pulp import LpMaximize, LpProblem, LpVariable, lpSum, PulpSolverError
 
-# Function to scrape player data from Rotowire
-def scrape_rotowire_data():
-    url = "https://www.rotowire.com/daily/nba/optimizer.php"
+# Function to scrape player data from NumberFire
+def scrape_numberfire_data():
+    url = "https://www.numberfire.com/nba/daily-fantasy/daily-basketball-projections"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
     response = requests.get(url, headers=headers)
     
@@ -16,10 +16,10 @@ def scrape_rotowire_data():
     
     soup = BeautifulSoup(response.text, "html.parser")
     players = []
-    table = soup.find("table", {"class": "optimizable-players"})
+    table = soup.find("table")
     
     if not table:
-        print("⚠️ Failed to locate player table on Rotowire.")
+        print("⚠️ Failed to locate player table on NumberFire.")
         return pd.DataFrame()
     
     rows = table.find_all("tr")[1:]
@@ -43,7 +43,7 @@ st.write("Generate up to 5 optimized NBA DFS lineups based on DraftKings salary 
 
 # Scrape player data
 st.write("Fetching latest player projections...")
-players_df = scrape_rotowire_data()
+players_df = scrape_numberfire_data()
 st.write("### Scraped Player Data")
 st.dataframe(players_df)
 
