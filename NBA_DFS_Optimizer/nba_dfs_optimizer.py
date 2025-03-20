@@ -97,9 +97,11 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
         
         # Lock and Exclude Players
         for player in locked_players:
-            prob += player_vars[player] == 1
+            if player in player_vars:
+                prob += player_vars[player] == 1
         for player in excluded_players:
-            prob += player_vars[player] == 0
+            if player in player_vars:
+                prob += player_vars[player] == 0
         
         # Solve the problem
         try:
@@ -119,6 +121,7 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
     for idx, lineup in enumerate(optimal_lineups):
         st.write(f"### Optimal Lineup {idx+1}")
         st.dataframe(lineup)
+
 
 
 
