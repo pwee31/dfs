@@ -33,7 +33,7 @@ def load_dfs_csv(uploaded_file):
         
         df = df[["Name", "Position", "Salary", "Projection"]]
         df = df[df["Projection"] > 0]  # Remove players with 0 projection
-        return df
+        return df.sort_values(by="Projection", ascending=False)
     except Exception as e:
         st.error(f"Error loading DFS data: {e}")
         return pd.DataFrame()
@@ -78,26 +78,27 @@ used_lineups = set()
 # Optimization button
 if st.button("Generate Optimal Lineups") and not players_df.empty:
     optimal_lineups = []
+    top_players = players_df.head(10)  # Consider top 10 projected players for variation
     
     for i in range(num_lineups):
         prob = LpProblem(f"NBA_DFS_Optimizer_{i+1}", LpMaximize)
-        player_vars = {p["Name"]: LpVariable(p["Name"], 0, 1, cat="Binary") for _, p in players_df.iterrows()}
+        player_vars = {p["Name"]: LpVariable(p["Name"], 0, 1, cat="Binary") for _, p in top_players.iterrows()}
         
         # Objective: Maximize projected points
         randomness_factor = random.uniform(0.9, 1.1)
-        prob += lpSum(player_vars[p["Name"]] * p["Projection"] * randomness_factor for _, p in players_df.iterrows())
+        prob += lpSum(player_vars[p["Name"]] * p["Projection"] * randomness_factor for _, p in top_players.iterrows())
         
-        # Salary cap constraint with more flexibility
+        # Salary cap constraint
         min_salary_cap = user_salary_cap * 0.75  # Allow using at least 75% of salary cap
-        prob += lpSum(player_vars[p["Name"]] * p["Salary"] for _, p in players_df.iterrows()) <= user_salary_cap
-        prob += lpSum(player_vars[p["Name"]] * p["Salary"] for _, p in players_df.iterrows()) >= min_salary_cap
+        prob += lpSum(player_vars[p["Name"]] * p["Salary"] for _, p in top_players.iterrows()) <= user_salary_cap
+        prob += lpSum(player_vars[p["Name"]] * p["Salary"] for _, p in top_players.iterrows()) >= min_salary_cap
         
         # Ensure exactly 8 players are selected
-        prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows()) == num_players
+        prob += lpSum(player_vars[p["Name"]] for _, p in top_players.iterrows()) == num_players
         
         # Position constraints based on DraftKings Roster Construction
         for pos, count in roster_slots.items():
-            prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] == pos or pos == "UTIL") == count
+            prob += lpSum(player_vars[p["Name"]] for _, p in top_players.iterrows() if p["Position"] == pos or pos == "UTIL") == count
         
         # Lock and Exclude Players
         for player in locked_players:
@@ -110,22 +111,21 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
         # Solve the problem
         try:
             prob.solve()
-            selected_players = tuple(sorted([p["Name"] for _, p in players_df.iterrows() if player_vars[p["Name"]].varValue == 1]))
+            selected_players = tuple(sorted([p["Name"] for _, p in top_players.iterrows() if player_vars[p["Name"]].varValue == 1]))
             
-            if selected_players and selected_players not in used_lineups:
+            if selected_players and selected_players not in used_lineups and len(selected_players) == num_players:
                 used_lineups.add(selected_players)
                 optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
                 optimal_lineups.append(optimal_lineup_df)
             else:
-                st.write(f"⚠️ Duplicate or infeasible lineup found for lineup {i+1}. Generating a new variation...")
-                while selected_players in used_lineups and len(players_df) >= num_players:
-                    selected_players = tuple(sorted(players_df.sample(n=num_players)["Name"].tolist()))
+                st.write(f"⚠️ Infeasible or duplicate lineup for lineup {i+1}. Generating a variation...")
+                selected_players = tuple(sorted(top_players.sample(n=num_players)["Name"].tolist()))
                 used_lineups.add(selected_players)
                 optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
                 optimal_lineups.append(optimal_lineup_df)
         except PulpSolverError:
-            st.write(f"⚠️ Optimization failed for lineup {i+1}. Generating a new variation...")
-            selected_players = tuple(sorted(players_df.sample(n=num_players)["Name"].tolist()))
+            st.write(f"⚠️ Optimization failed for lineup {i+1}. Generating a variation...")
+            selected_players = tuple(sorted(top_players.sample(n=num_players)["Name"].tolist()))
             optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
             optimal_lineups.append(optimal_lineup_df)
     
@@ -133,3 +133,4 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
     for idx, lineup in enumerate(optimal_lineups):
         st.write(f"### Optimal Lineup {idx+1}")
         st.dataframe(lineup)
+
