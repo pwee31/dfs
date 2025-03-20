@@ -1,79 +1,91 @@
 import streamlit as st
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
 from pulp import LpMaximize, LpProblem, LpVariable, lpSum, PulpSolverError
 
-# Sample NBA DFS Player Data (Replace with real data if available)
-players_data = [
-    {"Name": "Luka Doncic", "Position": "PG", "Salary": 11000, "Projection": 55},
-    {"Name": "Stephen Curry", "Position": "PG", "Salary": 9800, "Projection": 50},
-    {"Name": "James Harden", "Position": "SG", "Salary": 9400, "Projection": 47},
-    {"Name": "Devin Booker", "Position": "SG", "Salary": 8900, "Projection": 45},
-    {"Name": "LeBron James", "Position": "SF", "Salary": 10200, "Projection": 52},
-    {"Name": "Kevin Durant", "Position": "SF", "Salary": 9700, "Projection": 50},
-    {"Name": "Jayson Tatum", "Position": "PF", "Salary": 9500, "Projection": 48},
-    {"Name": "Giannis Antetokounmpo", "Position": "PF", "Salary": 11200, "Projection": 58},
-    {"Name": "Nikola Jokic", "Position": "C", "Salary": 11300, "Projection": 60},
-    {"Name": "Joel Embiid", "Position": "C", "Salary": 10900, "Projection": 57},
-]
-
-# Convert to DataFrame
-players_df = pd.DataFrame(players_data)
+# Function to scrape player data from Rotowire (example source)
+def scrape_player_data():
+    url = "https://www.rotowire.com/basketball/projections.php"
+    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
+    soup = BeautifulSoup(response.text, "html.parser")
+    
+    players = []
+    table = soup.find("table", {"class": "projection-table"})
+    if table:
+        rows = table.find_all("tr")[1:]
+        for row in rows:
+            cols = row.find_all("td")
+            if len(cols) > 5:
+                name = cols[0].text.strip()
+                position = cols[1].text.strip()
+                salary = int(cols[2].text.strip().replace("$", "").replace(",", ""))
+                projection = float(cols[3].text.strip())
+                players.append({"Name": name, "Position": position, "Salary": salary, "Projection": projection})
+    
+    return pd.DataFrame(players)
 
 # Streamlit UI
 st.title("NBA DFS Optimizer - DraftKings Edition")
-st.write("Generate optimized NBA DFS lineups based on DraftKings salary cap.")
+st.write("Generate up to 5 optimized NBA DFS lineups based on DraftKings salary cap.")
 
-# DraftKings Salary Cap & Position Constraints
-salary_cap = 50000  # DraftKings cap
+# Scrape player data
+st.write("Fetching latest player projections...")
+players_df = scrape_player_data()
+st.write("### Scraped Player Data")
+st.dataframe(players_df)
+
+# DraftKings Salary Cap & Roster Constraints
+salary_cap = 50000
 roster_slots = {"PG": 1, "SG": 1, "SF": 1, "PF": 1, "C": 1, "G": 1, "F": 1, "UTIL": 1}
-num_players = sum(roster_slots.values())  # Should be 8 players
+num_players = sum(roster_slots.values())
 
-# User Input for Custom Salary Cap
+# User Input for Salary Cap and Number of Lineups
 user_salary_cap = st.number_input("Set Salary Cap", min_value=40000, max_value=60000, value=salary_cap, step=500)
+num_lineups = st.slider("Number of Lineups", 1, 5, 3)
 
 # Optimization button
-if st.button("Generate Optimal Lineup"):
-
-    # Create optimization problem
-    prob = LpProblem("NBA_DFS_Optimizer", LpMaximize)
-
-    # Create player variables (binary: 0 = not selected, 1 = selected)
-    player_vars = {p["Name"]: LpVariable(p["Name"], 0, 1, cat="Binary") for p in players_data}
-
-    # Objective: Maximize projected points
-    prob += lpSum(player_vars[p["Name"]] * p["Projection"] for p in players_data)
-
-    # Salary cap constraint
-    prob += lpSum(player_vars[p["Name"]] * p["Salary"] for p in players_data) <= user_salary_cap
-
-    # Enforce exactly 8 players in lineup
-    prob += lpSum(player_vars[p["Name"]] for p in players_data) == num_players
-
-    # Position constraints for roster slots
-    for pos, count in roster_slots.items():
-        if pos == "G":  # G slot can be PG or SG
-            prob += lpSum(player_vars[p["Name"]] for p in players_data if p["Position"] in ["PG", "SG"]) >= count
-        elif pos == "F":  # F slot can be SF or PF
-            prob += lpSum(player_vars[p["Name"]] for p in players_data if p["Position"] in ["SF", "PF"]) >= count
-        elif pos == "UTIL":  # UTIL can be any position
-            prob += lpSum(player_vars[p["Name"]] for p in players_data) >= count
-        else:  # Specific positions (PG, SG, SF, PF, C)
-            prob += lpSum(player_vars[p["Name"]] for p in players_data if p["Position"] == pos) == count
-
-    # Solve the problem
-    try:
-        prob.solve()
-        
-        # Get selected players
-        selected_players = [p["Name"] for p in players_data if player_vars[p["Name"]].varValue == 1]
-
-        # Display optimal lineup
-        if selected_players:
-            st.write("### Optimal Lineup")
-            optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
-            st.dataframe(optimal_lineup_df)
-        else:
-            st.write("⚠️ No valid lineup found. Adjust salary cap or player pool.")
+if st.button("Generate Optimal Lineups"):
+    optimal_lineups = []
     
-    except PulpSolverError:
-        st.write("⚠️ Optimization failed. Try adjusting constraints or data.")
+    for i in range(num_lineups):
+        prob = LpProblem(f"NBA_DFS_Optimizer_{i+1}", LpMaximize)
+        player_vars = {p["Name"]: LpVariable(p["Name"], 0, 1, cat="Binary") for _, p in players_df.iterrows()}
+        
+        # Objective: Maximize projected points
+        prob += lpSum(player_vars[p["Name"]] * p["Projection"] for _, p in players_df.iterrows())
+        
+        # Salary cap constraint
+        prob += lpSum(player_vars[p["Name"]] * p["Salary"] for _, p in players_df.iterrows()) <= user_salary_cap
+        
+        # Ensure exactly 8 players are selected
+        prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows()) == num_players
+        
+        # Position constraints
+        for pos, count in roster_slots.items():
+            if pos == "G":  # G slot can be PG or SG
+                prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] in ["PG", "SG"]) >= count
+            elif pos == "F":  # F slot can be SF or PF
+                prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] in ["SF", "PF"]) >= count
+            elif pos == "UTIL":  # UTIL can be any position
+                prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows()) >= count
+            else:
+                prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] == pos) == count
+        
+        # Solve the problem
+        try:
+            prob.solve()
+            selected_players = [p["Name"] for _, p in players_df.iterrows() if player_vars[p["Name"]].varValue == 1]
+            
+            if selected_players:
+                optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
+                optimal_lineups.append(optimal_lineup_df)
+            else:
+                st.write(f"⚠️ No valid lineup found for lineup {i+1}. Adjust salary cap or player pool.")
+        except PulpSolverError:
+            st.write(f"⚠️ Optimization failed for lineup {i+1}. Try adjusting constraints.")
+    
+    # Display optimal lineups
+    for idx, lineup in enumerate(optimal_lineups):
+        st.write(f"### Optimal Lineup {idx+1}")
+        st.dataframe(lineup)
