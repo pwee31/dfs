@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from pulp import LpMaximize, LpProblem, LpVariable, lpSum
 
-# Sample NBA DFS Player Data (can be replaced with live projections)
+# Sample NBA DFS Player Data (Replace with real data if available)
 players_data = [
     {"Name": "Luka Doncic", "Position": "PG", "Salary": 11000, "Projection": 55},
     {"Name": "Stephen Curry", "Position": "PG", "Salary": 9800, "Projection": 50},
@@ -20,38 +20,36 @@ players_data = [
 players_df = pd.DataFrame(players_data)
 
 # Streamlit UI
-st.title("NBA DFS Optimizer")
+st.title("NBA DFS Optimizer - DraftKings Edition")
+st.write("Generate optimized NBA DFS lineups based on DraftKings salary cap.")
 
-salary_cap = st.number_input("Salary Cap", min_value=40000, max_value=60000, value=50000, step=500)
+# DraftKings Salary Cap & Position Constraints
+salary_cap = 50000  # DraftKings cap
+positions = {"PG": 1, "SG": 1, "SF": 1, "PF": 1, "C": 1, "G": 1, "F": 1, "UTIL": 1}
 
-# Define DFS constraints (DraftKings format)
-positions = {"PG": 2, "SG": 2, "SF": 2, "PF": 2, "C": 1}
+# User Input for Custom Salary Cap
+user_salary_cap = st.number_input("Set Salary Cap", min_value=40000, max_value=60000, value=salary_cap, step=500)
 
-# Create optimization problem
-prob = LpProblem("NBA_DFS_Optimizer", LpMaximize)
-
-# Create player variables (binary: 0 = not selected, 1 = selected)
-player_vars = {p["Name"]: LpVariable(p["Name"], 0, 1, cat="Binary") for p in players_data}
-
-# Objective: Maximize projected points
-prob += lpSum(player_vars[p["Name"]] * p["Projection"] for p in players_data)
-
-# Salary cap constraint
-prob += lpSum(player_vars[p["Name"]] * p["Salary"] for p in players_data) <= salary_cap
-
-# Position constraints
-for pos, count in positions.items():
-    prob += lpSum(player_vars[p["Name"]] for p in players_data if p["Position"] == pos) == count
-
-# Solve the problem
-prob.solve()
-
-# Get selected players
-selected_players = [p["Name"] for p in players_data if player_vars[p["Name"]].value() == 1]
-
-# Display optimal lineup
+# Optimization button
 if st.button("Generate Optimal Lineup"):
-    # Solve the optimization problem
+
+    # Create optimization problem
+    prob = LpProblem("NBA_DFS_Optimizer", LpMaximize)
+
+    # Create player variables (binary: 0 = not selected, 1 = selected)
+    player_vars = {p["Name"]: LpVariable(p["Name"], 0, 1, cat="Binary") for p in players_data}
+
+    # Objective: Maximize projected points
+    prob += lpSum(player_vars[p["Name"]] * p["Projection"] for p in players_data)
+
+    # Salary cap constraint
+    prob += lpSum(player_vars[p["Name"]] * p["Salary"] for p in players_data) <= user_salary_cap
+
+    # Position constraints
+    for pos, count in positions.items():
+        prob += lpSum(player_vars[p["Name"]] for p in players_data if p["Position"] == pos) >= count
+
+    # Solve the problem
     prob.solve()
 
     # Get selected players
@@ -60,6 +58,7 @@ if st.button("Generate Optimal Lineup"):
     # Display optimal lineup
     if selected_players:
         st.write("### Optimal Lineup")
-        st.dataframe(players_df[players_df["Name"].isin(selected_players)])
+        optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
+        st.dataframe(optimal_lineup_df)
     else:
-        st.write("No valid lineup found. Adjust salary cap or data.")
+        st.write("⚠️ No valid lineup found. Adjust salary cap or player pool.")
