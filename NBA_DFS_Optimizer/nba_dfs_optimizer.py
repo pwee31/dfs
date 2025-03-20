@@ -107,6 +107,10 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
             if player in player_vars:
                 prob += player_vars[player] == 0
         
+        # Ensure variation by modifying objective slightly
+        randomness_factor = random.uniform(0.9, 1.1)  # Adds slight variation to projections
+        prob += lpSum(player_vars[p["Name"]] * p["Projection"] * randomness_factor for _, p in players_df.iterrows())
+        
         # Solve the problem
         try:
             prob.solve()
@@ -125,6 +129,7 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
     for idx, lineup in enumerate(optimal_lineups):
         st.write(f"### Optimal Lineup {idx+1}")
         st.dataframe(lineup)
+
 
 
 
