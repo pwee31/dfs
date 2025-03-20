@@ -2,15 +2,14 @@ import streamlit as st
 import pandas as pd
 from pulp import LpMaximize, LpProblem, LpVariable, lpSum, PulpSolverError
 
-# Load NBA DFS CSV Data
-@st.cache_data
-def load_dfs_csv():
-    file_path = "/mnt/data/DFF_NBA_cheatsheet_2025-03-20.csv"  # Path to uploaded DFS CSV
+# Load NBA DFS CSV Data from Upload
+def load_dfs_csv(uploaded_file):
     try:
-        df = pd.read_csv(file_path)
-        st.write("### Detected Columns in CSV:")
-        st.write(df.columns.tolist())
-        
+        df = pd.read_csv(uploaded_file)
+
+        st.write("### 🔍 Detected Columns in CSV:")
+        st.write(df.columns.tolist())  # Debugging: Show actual column names
+
         # Mapping based on detected column names
         rename_mapping = {
             "first_name": "First Name",
@@ -19,34 +18,42 @@ def load_dfs_csv():
             "salary": "Salary",
             "ppg_projection": "Projection"
         }
-        
+
         df = df.rename(columns=rename_mapping)
-        
+
         # Create a 'Name' column by combining first and last name
         if "First Name" in df.columns and "Last Name" in df.columns:
             df["Name"] = df["First Name"] + " " + df["Last Name"]
-        
+
+        # Check if all required columns exist
         missing_columns = [col for col in ["Name", "Position", "Salary", "Projection"] if col not in df.columns]
-        
         if missing_columns:
-            st.error(f"⚠️ Missing columns in CSV: {missing_columns}")
+            st.error(f"⚠️ Missing critical columns: {missing_columns}")
             return pd.DataFrame()
-        
+
+        # Select only necessary columns
         df = df[["Name", "Position", "Salary", "Projection"]]
         return df
+
     except Exception as e:
         st.error(f"Error loading DFS data: {e}")
         return pd.DataFrame()
 
 # Streamlit UI
 st.title("NBA DFS Optimizer - DraftKings Edition")
-st.write("Generate up to 5 optimized NBA DFS lineups based on DraftKings salary cap.")
+st.write("Upload your DFS CSV file to generate optimized lineups.")
 
-# Load CSV player data
-players_df = load_dfs_csv()
-if players_df.empty:
-    st.write("⚠️ No valid player data found. Please upload a valid DFS CSV file.")
+# File uploader for user to upload their CSV
+uploaded_file = st.file_uploader("Upload DFS CSV", type=["csv"])
+
+if uploaded_file:
+    players_df = load_dfs_csv(uploaded_file)
 else:
+    players_df = pd.DataFrame()
+    st.write("⚠️ No file uploaded. Please upload a valid DFS CSV file.")
+
+# Show Data
+if not players_df.empty:
     st.write("### Loaded Player Data")
     st.dataframe(players_df)
 
@@ -60,7 +67,7 @@ user_salary_cap = st.number_input("Set Salary Cap", min_value=40000, max_value=6
 num_lineups = st.slider("Number of Lineups", 1, 5, 3)
 
 # Optimization button
-if st.button("Generate Optimal Lineups"):
+if st.button("Generate Optimal Lineups") and not players_df.empty:
     optimal_lineups = []
     
     for i in range(num_lineups):
@@ -89,7 +96,7 @@ if st.button("Generate Optimal Lineups"):
         # Solve the problem
         try:
             prob.solve()
-            selected_players = [p["Name"] for _, p in players_df.iterrows() if player_vars[p["Name"].varValue == 1]]
+            selected_players = [p["Name"] for _, p in players_df.iterrows() if player_vars[p["Name"]].varValue == 1]
             
             if selected_players:
                 optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
