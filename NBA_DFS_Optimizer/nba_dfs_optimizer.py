@@ -4,10 +4,11 @@ import requests
 from bs4 import BeautifulSoup
 from pulp import LpMaximize, LpProblem, LpVariable, lpSum, PulpSolverError
 
-# Function to scrape player data from NumberFire
-def scrape_numberfire_data():
-    url = "https://www.numberfire.com/nba/daily-fantasy/daily-basketball-projections"
+# Function to scrape player data from ESPN NBA
+def scrape_espn_data():
+    url = "https://www.espn.com/nba/stats/player"  # ESPN stats page
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
+    
     response = requests.get(url, headers=headers)
     
     if response.status_code != 200:
@@ -16,10 +17,11 @@ def scrape_numberfire_data():
     
     soup = BeautifulSoup(response.text, "html.parser")
     players = []
-    table = soup.find("table")
     
+    # Find table
+    table = soup.find("table")
     if not table:
-        print("⚠️ Failed to locate player table on NumberFire.")
+        print("⚠️ Failed to locate player table on ESPN.")
         return pd.DataFrame()
     
     rows = table.find_all("tr")[1:]
@@ -28,9 +30,9 @@ def scrape_numberfire_data():
         if len(cols) > 5:
             try:
                 name = cols[0].text.strip()
-                position = cols[1].text.strip()
-                salary = int(cols[2].text.strip().replace("$", "").replace(",", ""))
-                projection = float(cols[3].text.strip())
+                position = "N/A"  # ESPN may not have position data
+                salary = 5000  # Placeholder salary if unavailable
+                projection = float(cols[1].text.strip())  # Assuming second column is projected points
                 players.append({"Name": name, "Position": position, "Salary": salary, "Projection": projection})
             except ValueError:
                 continue
@@ -43,7 +45,7 @@ st.write("Generate up to 5 optimized NBA DFS lineups based on DraftKings salary 
 
 # Scrape player data
 st.write("Fetching latest player projections...")
-players_df = scrape_numberfire_data()
+players_df = scrape_espn_data()
 st.write("### Scraped Player Data")
 st.dataframe(players_df)
 
