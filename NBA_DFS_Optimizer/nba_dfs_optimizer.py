@@ -21,7 +21,7 @@ def load_dfs_csv(uploaded_file):
         
         df = df.rename(columns=rename_mapping)
         
-        # Create a 'Name' column by combining first and last name
+        # Create a 'Name" column by combining first and last name
         if "First Name" in df.columns and "Last Name" in df.columns:
             df["Name"] = df["First Name"] + " " + df["Last Name"]
         
@@ -83,10 +83,11 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
         player_vars = {p["Name"]: LpVariable(p["Name"], 0, 1, cat="Binary") for _, p in players_df.iterrows()}
         
         # Objective: Maximize projected points
-        prob += lpSum(player_vars[p["Name"]] * p["Projection"] for _, p in players_df.iterrows())
+        randomness_factor = random.uniform(0.9, 1.1)
+        prob += lpSum(player_vars[p["Name"]] * p["Projection"] * randomness_factor for _, p in players_df.iterrows())
         
-        # Salary cap constraint with flexibility
-        min_salary_cap = user_salary_cap * 0.9  # Allow using at least 90% of salary cap
+        # Salary cap constraint with more flexibility
+        min_salary_cap = user_salary_cap * 0.85  # Allow using at least 85% of salary cap
         prob += lpSum(player_vars[p["Name"]] * p["Salary"] for _, p in players_df.iterrows()) <= user_salary_cap
         prob += lpSum(player_vars[p["Name"]] * p["Salary"] for _, p in players_df.iterrows()) >= min_salary_cap
         
@@ -96,13 +97,13 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
         # Position constraints based on DraftKings Roster Construction
         for pos, count in roster_slots.items():
             if pos == "G":
-                prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] in ["PG", "SG"]) == count
+                prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] in ["PG", "SG"]) >= count
             elif pos == "F":
-                prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] in ["SF", "PF"]) == count
+                prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] in ["SF", "PF"]) >= count
             elif pos == "UTIL":
                 prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows()) >= count
             else:
-                prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] == pos) == count
+                prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] == pos) >= count
         
         # Lock and Exclude Players
         for player in locked_players:
@@ -111,10 +112,6 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
         for player in excluded_players:
             if player in player_vars:
                 prob += player_vars[player] == 0
-        
-        # Ensure variation by modifying objective slightly
-        randomness_factor = random.uniform(0.9, 1.1)  # Adds slight variation to projections
-        prob += lpSum(player_vars[p["Name"]] * p["Projection"] * randomness_factor for _, p in players_df.iterrows())
         
         # Solve the problem
         try:
@@ -126,18 +123,12 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
                 optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
                 optimal_lineups.append(optimal_lineup_df)
             else:
-                st.write(f"⚠️ Duplicate lineup found for lineup {i+1}. Adjust constraints to generate unique lineups.")
+                st.write(f"⚠️ Duplicate or infeasible lineup found for lineup {i+1}. Adjust constraints.")
         except PulpSolverError:
-            st.write(f"⚠️ Optimization failed for lineup {i+1}. Try adjusting constraints.")
+            st.write(f"⚠️ Optimization failed for lineup {i+1}. Adjust constraints or remove locked players if needed.")
     
     # Display optimal lineups
     for idx, lineup in enumerate(optimal_lineups):
         st.write(f"### Optimal Lineup {idx+1}")
         st.dataframe(lineup)
-
-
-
-
-
-
 
