@@ -7,7 +7,7 @@ def load_dfs_csv(uploaded_file):
     try:
         df = pd.read_csv(uploaded_file)
 
-        st.write("### Detected Columns in CSV:")
+        st.write("### 🔍 Detected Columns in CSV:")
         st.write(df.columns.tolist())  # Debugging: Show actual column names
 
         # Auto-detect relevant columns
