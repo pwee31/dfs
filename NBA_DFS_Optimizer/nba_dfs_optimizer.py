@@ -96,7 +96,7 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
         # Solve the problem
         try:
             prob.solve()
-            selected_players = tuple(sorted([p["Name"] for _, p in players_df.iterrows() if player_vars[p["Name"].varValue == 1]]))
+            selected_players = tuple(sorted([p["Name"] for _, p in players_df.iterrows() if player_vars[p["Name"].value()] == 1]))
             
             if selected_players and selected_players not in used_lineups:
                 used_lineups.add(selected_players)
@@ -111,6 +111,7 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
     for idx, lineup in enumerate(optimal_lineups):
         st.write(f"### Optimal Lineup {idx+1}")
         st.dataframe(lineup)
+
 
 
 
