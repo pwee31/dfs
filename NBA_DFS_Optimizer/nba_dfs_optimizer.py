@@ -59,9 +59,11 @@ salary_cap = 50000
 roster_slots = {"PG": 1, "SG": 1, "SF": 1, "PF": 1, "C": 1, "G": 1, "F": 1, "UTIL": 1}
 num_players = sum(roster_slots.values())
 
-# User Input for Salary Cap and Number of Lineups
+# User Input for Salary Cap, Number of Lineups, and Player Locks/Exclusions
 user_salary_cap = st.number_input("Set Salary Cap", min_value=40000, max_value=60000, value=salary_cap, step=500)
 num_lineups = st.slider("Number of Lineups", 1, 5, 3)
+locked_players = st.multiselect("Lock Players (Ensure they are in every lineup)", players_df["Name"].tolist())
+excluded_players = st.multiselect("Exclude Players (Remove them from all lineups)", players_df["Name"].tolist())
 
 # Store used lineups to prevent duplicates
 used_lineups = set()
@@ -92,6 +94,12 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
         prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] in ["PG", "SG"]) == 1  # G Slot
         prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] in ["SF", "PF"]) == 1  # F Slot
         prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows()) == num_players  # UTIL Slot
+        
+        # Lock and Exclude Players
+        for player in locked_players:
+            prob += player_vars[player] == 1
+        for player in excluded_players:
+            prob += player_vars[player] == 0
         
         # Solve the problem
         try:
