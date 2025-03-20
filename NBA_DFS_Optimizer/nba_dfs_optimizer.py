@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from pulp import LpMaximize, LpProblem, LpVariable, lpSum, PulpSolverError
+import random
 
 # Load NBA DFS CSV Data from File Uploader
 def load_dfs_csv(uploaded_file):
@@ -79,21 +80,24 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
         # Objective: Maximize projected points
         prob += lpSum(player_vars[p["Name"]] * p["Projection"] for _, p in players_df.iterrows())
         
-        # Salary cap constraint
+        # Salary cap constraint with flexibility
+        min_salary_cap = user_salary_cap * 0.9  # Allow using at least 90% of salary cap
         prob += lpSum(player_vars[p["Name"]] * p["Salary"] for _, p in players_df.iterrows()) <= user_salary_cap
+        prob += lpSum(player_vars[p["Name"]] * p["Salary"] for _, p in players_df.iterrows()) >= min_salary_cap
         
         # Ensure exactly 8 players are selected
         prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows()) == num_players
         
         # Position constraints based on DraftKings Roster Construction
-        prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] == "PG") == 1
-        prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] == "SG") == 1
-        prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] == "SF") == 1
-        prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] == "PF") == 1
-        prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] == "C") == 1
-        prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] in ["PG", "SG"]) == 1  # G Slot
-        prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] in ["SF", "PF"]) == 1  # F Slot
-        prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows()) == num_players  # UTIL Slot
+        for pos, count in roster_slots.items():
+            if pos == "G":
+                prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] in ["PG", "SG"]) == count
+            elif pos == "F":
+                prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] in ["SF", "PF"]) == count
+            elif pos == "UTIL":
+                prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows()) >= count
+            else:
+                prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] == pos) == count
         
         # Lock and Exclude Players
         for player in locked_players:
