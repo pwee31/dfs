@@ -87,7 +87,7 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
         prob += lpSum(player_vars[p["Name"]] * p["Projection"] * randomness_factor for _, p in players_df.iterrows())
         
         # Salary cap constraint with more flexibility
-        min_salary_cap = user_salary_cap * 0.85  # Allow using at least 85% of salary cap
+        min_salary_cap = user_salary_cap * 0.75  # Allow using at least 75% of salary cap
         prob += lpSum(player_vars[p["Name"]] * p["Salary"] for _, p in players_df.iterrows()) <= user_salary_cap
         prob += lpSum(player_vars[p["Name"]] * p["Salary"] for _, p in players_df.iterrows()) >= min_salary_cap
         
@@ -123,9 +123,13 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
                 optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
                 optimal_lineups.append(optimal_lineup_df)
             else:
-                st.write(f"⚠️ Duplicate or infeasible lineup found for lineup {i+1}. Adjust constraints.")
+                st.write(f"⚠️ Duplicate or infeasible lineup found for lineup {i+1}. Generating a sub-optimal lineup...")
+                sub_optimal_players = players_df.sample(n=num_players)  # Randomly select players if optimal lineup fails
+                optimal_lineups.append(sub_optimal_players)
         except PulpSolverError:
-            st.write(f"⚠️ Optimization failed for lineup {i+1}. Adjust constraints or remove locked players if needed.")
+            st.write(f"⚠️ Optimization failed for lineup {i+1}. Generating a sub-optimal lineup...")
+            sub_optimal_players = players_df.sample(n=num_players)  # Random selection as fallback
+            optimal_lineups.append(sub_optimal_players)
     
     # Display optimal lineups
     for idx, lineup in enumerate(optimal_lineups):
