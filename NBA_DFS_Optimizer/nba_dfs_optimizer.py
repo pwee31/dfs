@@ -21,7 +21,7 @@ def load_dfs_csv(uploaded_file):
         
         df = df.rename(columns=rename_mapping)
         
-        # Create a 'Name' column by combining first and last name
+        # Create a 'Name" column by combining first and last name
         if "First Name" in df.columns and "Last Name" in df.columns:
             df["Name"] = df["First Name"] + " " + df["Last Name"]
         
@@ -138,10 +138,9 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
             st.write(f"### Optimal Lineup {idx+1}")
             st.dataframe(lineup)
     else:
-        st.write("⚠️ No valid lineups generated, but trying alternative methods to generate lineups.")
-        random_lineups = players_df.sample(n=num_players * num_lineups, replace=True).groupby(players_df.index // num_players)
-        for idx, (_, lineup) in enumerate(random_lineups):
-            st.write(f"### Alternative Lineup {idx+1}")
-            st.dataframe(lineup)
-
-
+        st.write("⚠️ No valid lineups generated, attempting alternative random selection.")
+        for i in range(num_lineups):
+            if len(players_df) >= num_players:
+                random_lineup = players_df.sample(n=num_players, replace=False)
+                st.write(f"### Alternative Lineup {i+1}")
+                st.dataframe(random_lineup)
