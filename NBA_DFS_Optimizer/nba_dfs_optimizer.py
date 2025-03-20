@@ -21,7 +21,7 @@ def load_dfs_csv(uploaded_file):
         
         df = df.rename(columns=rename_mapping)
         
-        # Create a 'Name" column by combining first and last name
+        # Create a 'Name' column by combining first and last name
         if "First Name" in df.columns and "Last Name" in df.columns:
             df["Name"] = df["First Name"] + " " + df["Last Name"]
         
@@ -81,6 +81,9 @@ players_df = players_df[~players_df["Name"].isin(excluded_players)]
 # Store used lineups to prevent duplicates
 used_lineups = set()
 player_usage = {name: 0 for name in players_df["Name"]}
+
+# Sort players by highest projection for best lineup ordering
+players_df = players_df.sort_values(by="Projection", ascending=False)
 
 # Optimization button
 if st.button("Generate Optimal Lineups") and not players_df.empty:
