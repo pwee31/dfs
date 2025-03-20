@@ -4,24 +4,36 @@ import requests
 from bs4 import BeautifulSoup
 from pulp import LpMaximize, LpProblem, LpVariable, lpSum, PulpSolverError
 
-# Function to scrape player data from Rotowire (example source)
-def scrape_player_data():
-    url = "https://www.rotowire.com/basketball/projections.php"
-    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
-    soup = BeautifulSoup(response.text, "html.parser")
+# Function to scrape player data from Rotowire
+def scrape_rotowire_data():
+    url = "https://www.rotowire.com/daily/nba/optimizer.php"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
+    response = requests.get(url, headers=headers)
     
+    if response.status_code != 200:
+        print("Failed to fetch data. Status code:", response.status_code)
+        return pd.DataFrame()
+    
+    soup = BeautifulSoup(response.text, "html.parser")
     players = []
-    table = soup.find("table", {"class": "projection-table"})
-    if table:
-        rows = table.find_all("tr")[1:]
-        for row in rows:
-            cols = row.find_all("td")
-            if len(cols) > 5:
+    table = soup.find("table", {"class": "optimizable-players"})
+    
+    if not table:
+        print("⚠️ Failed to locate player table on Rotowire.")
+        return pd.DataFrame()
+    
+    rows = table.find_all("tr")[1:]
+    for row in rows:
+        cols = row.find_all("td")
+        if len(cols) > 5:
+            try:
                 name = cols[0].text.strip()
                 position = cols[1].text.strip()
                 salary = int(cols[2].text.strip().replace("$", "").replace(",", ""))
                 projection = float(cols[3].text.strip())
                 players.append({"Name": name, "Position": position, "Salary": salary, "Projection": projection})
+            except ValueError:
+                continue
     
     return pd.DataFrame(players)
 
@@ -31,7 +43,7 @@ st.write("Generate up to 5 optimized NBA DFS lineups based on DraftKings salary 
 
 # Scrape player data
 st.write("Fetching latest player projections...")
-players_df = scrape_player_data()
+players_df = scrape_rotowire_data()
 st.write("### Scraped Player Data")
 st.dataframe(players_df)
 
@@ -63,11 +75,11 @@ if st.button("Generate Optimal Lineups"):
         
         # Position constraints
         for pos, count in roster_slots.items():
-            if pos == "G":  # G slot can be PG or SG
+            if pos == "G":
                 prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] in ["PG", "SG"]) >= count
-            elif pos == "F":  # F slot can be SF or PF
+            elif pos == "F":
                 prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] in ["SF", "PF"]) >= count
-            elif pos == "UTIL":  # UTIL can be any position
+            elif pos == "UTIL":
                 prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows()) >= count
             else:
                 prob += lpSum(player_vars[p["Name"]] for _, p in players_df.iterrows() if p["Position"] == pos) == count
