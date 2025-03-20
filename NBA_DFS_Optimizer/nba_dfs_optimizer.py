@@ -33,6 +33,7 @@ def load_dfs_csv(uploaded_file):
         
         df = df[["Name", "Position", "Salary", "Projection"]]
         df = df[df["Projection"] >= 15]  # Remove players projected under 15 points
+        df["Value"] = df["Projection"] / df["Salary"]  # Compute value metric for better optimization
         return df.sort_values(by="Projection", ascending=False)
     except Exception as e:
         st.error(f"Error loading DFS data: {e}")
@@ -68,28 +69,31 @@ roster_slots = {"PG": 1, "SG": 1, "SF": 1, "PF": 1, "C": 1, "G": 1, "F": 1, "UTI
 num_players = sum(roster_slots.values())
 
 # User Input for Salary Cap, Number of Lineups, and Player Locks/Exclusions
-user_salary_cap = st.number_input("Set Salary Cap", min_value=40000, max_value=50000, value=salary_cap, step=500)
+user_salary_cap = st.number_input("Set Salary Cap", min_value=45000, max_value=50000, value=salary_cap, step=500)
 num_lineups = st.slider("Number of Lineups", 1, 5, 3)
 locked_players = st.multiselect("Lock Players (Ensure they are in every lineup)", players_df["Name"].tolist())
 excluded_players = st.multiselect("Exclude Players (Remove them from all lineups)", players_df["Name"].tolist())
+max_exposure = st.slider("Max Exposure % (Limit player repetition across lineups)", 10, 100, 80, step=10)
 
 # Exclude excluded players from selection
 players_df = players_df[~players_df["Name"].isin(excluded_players)]
 
 # Store used lineups to prevent duplicates
 used_lineups = set()
+player_usage = {name: 0 for name in players_df["Name"]}
 
 # Optimization button
 if st.button("Generate Optimal Lineups") and not players_df.empty:
     optimal_lineups = []
     top_players = players_df  # Use all players projected >= 15 points
+    max_usage = (num_lineups * (max_exposure / 100))  # Max times a player can appear
     
     for i in range(num_lineups):
         prob = LpProblem(f"NBA_DFS_Optimizer_{i+1}", LpMaximize)
         player_vars = {p["Name"]: LpVariable(p["Name"], 0, 1, cat="Binary") for _, p in top_players.iterrows()}
         
-        # Objective: Maximize projected points
-        prob += lpSum(player_vars[p["Name"]] * p["Projection"] for _, p in top_players.iterrows())
+        # Objective: Maximize projected points while balancing value metric
+        prob += lpSum(player_vars[p["Name"]] * (p["Projection"] + (p["Value"] * 10)) for _, p in top_players.iterrows())
         
         # Salary cap constraint (Ensure salary falls between 45,000 and 50,000)
         total_salary = lpSum(player_vars[p["Name"]] * p["Salary"] for _, p in top_players.iterrows())
@@ -108,6 +112,11 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
             if player in player_vars:
                 prob += player_vars[player] == 1
         
+        # Exposure constraint (limit how often a player appears across lineups)
+        for player, var in player_vars.items():
+            if player_usage[player] >= max_usage:
+                prob += var == 0
+        
         # Solve the problem
         try:
             prob.solve()
@@ -117,6 +126,8 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
             if selected_players and selected_players not in used_lineups and len(selected_players) == num_players:
                 if min_salary_cap <= total_salary_value <= user_salary_cap:  # Ensure lineup is within cap range
                     used_lineups.add(selected_players)
+                    for player in selected_players:
+                        player_usage[player] += 1
                     optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
                     optimal_lineups.append(optimal_lineup_df)
                 else:
@@ -133,3 +144,4 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
             st.dataframe(lineup)
     else:
         st.write("⚠️ No valid lineups generated. Try adjusting your constraints, salary cap, or locked players.")
+
