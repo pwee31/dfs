@@ -63,6 +63,7 @@ if "Name" not in players_df.columns:
 
 # DraftKings Salary Cap & Roster Constraints
 salary_cap = 50000
+min_salary_cap = 45000  # Minimum salary cap for valid lineups
 roster_slots = {"PG": 1, "SG": 1, "SF": 1, "PF": 1, "C": 1, "G": 1, "F": 1, "UTIL": 1}
 num_players = sum(roster_slots.values())
 
@@ -90,8 +91,10 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
         # Objective: Maximize projected points
         prob += lpSum(player_vars[p["Name"]] * p["Projection"] for _, p in top_players.iterrows())
         
-        # Salary cap constraint (Allowing a slight buffer to ensure feasibility)
-        prob += lpSum(player_vars[p["Name"]] * p["Salary"] for _, p in top_players.iterrows()) <= user_salary_cap
+        # Salary cap constraint (Ensure salary falls between 45,000 and 50,000)
+        total_salary = lpSum(player_vars[p["Name"]] * p["Salary"] for _, p in top_players.iterrows())
+        prob += total_salary <= user_salary_cap
+        prob += total_salary >= min_salary_cap
         
         # Ensure exactly 8 players are selected
         prob += lpSum(player_vars[p["Name"]] for _, p in top_players.iterrows()) == num_players
@@ -110,14 +113,14 @@ if st.button("Generate Optimal Lineups") and not players_df.empty:
             prob.solve()
             selected_players = tuple(sorted([p["Name"] for _, p in top_players.iterrows() if player_vars[p["Name"]].varValue == 1]))
             
-            total_salary = sum(players_df.loc[players_df["Name"].isin(selected_players), "Salary"])
+            total_salary_value = sum(players_df.loc[players_df["Name"].isin(selected_players), "Salary"])
             if selected_players and selected_players not in used_lineups and len(selected_players) == num_players:
-                if total_salary <= user_salary_cap:  # FINAL SALARY CHECK BEFORE ADDING LINEUP
+                if min_salary_cap <= total_salary_value <= user_salary_cap:  # Ensure lineup is within cap range
                     used_lineups.add(selected_players)
                     optimal_lineup_df = players_df[players_df["Name"].isin(selected_players)]
                     optimal_lineups.append(optimal_lineup_df)
                 else:
-                    st.write(f"⚠️ Lineup {i+1} exceeds salary cap. Retrying with alternative players...")
+                    st.write(f"⚠️ Lineup {i+1} does not meet salary range. Retrying with alternative players...")
                     continue
         except PulpSolverError:
             st.write(f"⚠️ Optimization failed for lineup {i+1}. Adjusting constraints and retrying...")
